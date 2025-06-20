@@ -1,0 +1,7 @@
+datasets
+pandas
+psycopg2-binary
+SQLAlchemy
+pyarrow
+python-dotenv
+numpy 
