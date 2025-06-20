@@ -134,9 +134,10 @@ def main(output_dir):
     """
     Orchestrates the data export process.
 
-    This function initializes the database connection, fetches the primary
-    leaderboard data, and fetches and anonymizes submission data, saving
-    each to a local Parquet file. The user ID mapping is not saved.
+    This function initializes the database connection, fetches leaderboard
+    and submission data, anonymizes user IDs, and saves the results to
+    separate Parquet files: `leaderboards.parquet`, `submissions.parquet`,
+    and `successful_submissions.parquet`. The user ID mapping is not saved.
 
     Args:
         output_dir (str): The local directory path to save the Parquet files.
@@ -195,6 +196,22 @@ def main(output_dir):
     submissions_output_path = os.path.join(output_dir, "submissions.parquet")
     submissions_dataset.to_parquet(submissions_output_path)
     print(f"Submissions dataset successfully saved to {submissions_output_path}")
+
+    # Filter for and save successful submissions from the anonymized data
+    if 'run_passed' in submissions_df.columns:
+        print("Creating successful submissions dataset...")
+        successful_submissions_df = submissions_df[submissions_df['run_passed'] == True].copy()
+
+        # Convert to dataset and save
+        successful_submissions_dataset = Dataset.from_pandas(successful_submissions_df)
+        successful_output_path = os.path.join(
+            output_dir, "successful_submissions.parquet"
+        )
+        successful_submissions_dataset.to_parquet(successful_output_path)
+        print(
+            "Successful submissions dataset successfully saved to "
+            f"{successful_output_path}"
+        )
 
 
 if __name__ == "__main__":
