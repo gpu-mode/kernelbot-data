@@ -29,7 +29,8 @@ This script exports data from a Postgres database to a Hugging Face dataset in P
 Run the script from the root of the repository:
 
 ```bash
-python scripts/hf_export/export.py --output_dir /path/to/your/dataset
+python export.py
 ```
 
-The script will create a directory at the specified output path containing the dataset in Parquet format. If `--output_dir` is not provided, it will save to `hf_dataset` in the current working directory. 
+The script will create a directory at the specified output path containing the dataset in Parquet format. If `--output_dir` is not provided, it will save to `dataset` in the current working directory.
+
