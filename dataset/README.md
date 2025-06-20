@@ -6,6 +6,8 @@ configs:
   data_files: "successful_submissions.parquet"
 - config_name: leaderboards
   data_files: "leaderboards.parquet"
+tags:
+- code
 license: mit
 ---
 
