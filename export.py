@@ -97,6 +97,8 @@ def fetch_submissions(engine, leaderboard_ids) -> Dataset:
             r.score AS run_score,
             r.passed AS run_passed,
             r.result AS run_result,
+            r.compilation as run_compilation,
+            r.meta as run_meta,
             r.system_info AS run_system_info
         FROM leaderboard.submission AS s
         JOIN leaderboard.runs AS r ON s.id = r.submission_id
