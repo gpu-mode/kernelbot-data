@@ -7,15 +7,6 @@ configs:
 - config_name: leaderboards
   data_files: "leaderboards.parquet"
 license: mit
-citation: |
-  @inproceedings{
-    zhang2025kernelbot,
-    title={KernelBot: A Competition Platform for Writing Heterogeneous {GPU} Code},
-    author={Alex L Zhang and Matej Sirovatka and Erik Schultheis and Benjamin Horowitz and Mark Saroufim},
-    booktitle={Championing Open-source DEvelopment in ML Workshop @ ICML25},
-    year={2025},
-    url={https://openreview.net/forum?id=bq9U4dmuyJ}
-  }
 ---
 
 If you use GPUMODE/amd-kernels-2025 in your work, please cite:
