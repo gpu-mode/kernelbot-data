@@ -9,6 +9,82 @@ from typing import Dict, List, Tuple, Union
 import datasketch
 import pandas as pd
 
+# =============================================================================
+# DEDUPLICATION CONFIGURATION CONSTANTS
+# =============================================================================
+
+# Fuzzy Deduplication Parameters
+FUZZY_SIMILARITY_THRESHOLD = 0.8
+"""
+Jaccard similarity threshold for considering two documents as duplicates.
+Range: 0.0 to 1.0
+- 0.8 = High threshold, only very similar documents are considered duplicates
+- 0.7 = Medium threshold, moderately similar documents are duplicates  
+- 0.5 = Low threshold, loosely similar documents are duplicates
+Higher values = more strict deduplication, fewer items removed
+"""
+
+NGRAM_SIZE = 5
+"""
+Size of character n-grams used for MinHash fingerprinting.
+- Smaller values (3-4): More sensitive to small changes, better for short text
+- Larger values (5-7): Less sensitive to minor variations, better for longer text
+- Too small: May create false positives (different texts seem similar)
+- Too large: May miss actual duplicates with small variations
+"""
+
+LSH_BANDS = 16
+"""
+Number of bands for Locality Sensitive Hashing (LSH).
+Used to speed up similarity detection by grouping similar hashes.
+- More bands = faster but less accurate similarity detection
+- Fewer bands = slower but more accurate similarity detection
+Must divide evenly into ROWS_PER_BAND * LSH_BANDS = total permutations
+"""
+
+ROWS_PER_BAND = 128
+"""
+Number of rows per band in LSH configuration.
+Total MinHash permutations = ROWS_PER_BAND * LSH_BANDS
+- More rows per band = higher precision, may miss some similar pairs
+- Fewer rows per band = higher recall, may include more false positives
+Default: 128 rows × 16 bands = 2048 total permutations
+"""
+
+# Score Processing Parameters
+LEADERBOARD_SCORE_PRECISION = 4
+"""
+Number of decimal places to round leaderboard scores when grouping submissions.
+Used to group submissions with very similar scores together.
+- Higher precision (more decimal places): More granular grouping
+- Lower precision (fewer decimal places): Broader grouping of similar scores
+"""
+
+DURATION_PRECISION = 0
+"""
+Number of decimal places to round execution duration (in seconds).
+Used to group submissions with similar execution times.
+- 0: Round to nearest second (1.7s → 2s)
+- 1: Round to nearest 0.1s (1.73s → 1.7s)
+"""
+
+# =============================================================================
+# CONFIGURATION SUMMARY
+# =============================================================================
+"""
+Current deduplication configuration:
+├─ Similarity Detection: 0.8 threshold (strict)
+├─ Text Fingerprinting: 5-character n-grams  
+├─ LSH Performance: 16 bands × 128 rows = 2048 permutations
+├─ Score Grouping: 4 decimal places for leaderboard scores
+└─ Duration Grouping: 0 decimal places for execution times
+
+To adjust deduplication sensitivity:
+- Increase FUZZY_SIMILARITY_THRESHOLD (0.8→0.9) for stricter deduplication
+- Decrease FUZZY_SIMILARITY_THRESHOLD (0.8→0.7) for more aggressive deduplication  
+- Adjust NGRAM_SIZE for different text lengths (3-4 for short, 5-7 for long)
+"""
+
 def remove_duplicates(data_dict: Dict[str, Dict[bool, Dict[Union[float, int], List[Dict]]]]):
     """
     Remove exact duplicates from the nested data structure returned by get_sorted_hf_data.
@@ -60,9 +136,9 @@ def remove_duplicates(data_dict: Dict[str, Dict[bool, Dict[Union[float, int], Li
 
 def create_minhashes(
     documents: List[Dict[str, str]],
-    ngram_size: int = 5,
-    bands: int = 20,
-    rows_per_band: int = 128,
+    ngram_size: int = NGRAM_SIZE,
+    bands: int = LSH_BANDS,
+    rows_per_band: int = ROWS_PER_BAND,
 ) -> Tuple[Dict[str, datasketch.MinHash], int]:
     """
     Create MinHash signatures for a list of documents with LSH bands configuration.
@@ -155,10 +231,10 @@ def filter_matrix(
 
 def fuzzy_filter(
     data_dict: Dict[str, Dict[bool, Dict[Union[float, int], List[Dict]]]],
-    threshold: float = 0.7,
-    ngram_size: int = 5,
-    bands: int = 16,
-    rows_per_band: int = 128,
+    threshold: float = FUZZY_SIMILARITY_THRESHOLD,
+    ngram_size: int = NGRAM_SIZE,
+    bands: int = LSH_BANDS,
+    rows_per_band: int = ROWS_PER_BAND,
 ) -> Dict[str, Dict[bool, Dict[Union[float, int], List[Dict]]]]:
     
     total_categories = 0
@@ -181,10 +257,10 @@ def fuzzy_filter(
 
 def _fuzzy_filter(
     data_list: List[Dict],
-    threshold: float = 0.7,
-    ngram_size: int = 5,
-    bands: int = 16,
-    rows_per_band: int = 128,
+    threshold: float = FUZZY_SIMILARITY_THRESHOLD,
+    ngram_size: int = NGRAM_SIZE,
+    bands: int = LSH_BANDS,
+    rows_per_band: int = ROWS_PER_BAND,
 ) -> List[Dict]:
     """
     Apply fuzzy deduplication to the nested data structure returned by get_sorted_hf_data.
@@ -263,10 +339,10 @@ def get_hf_data() -> Dict[str, Dict[Union[float, int], List[Dict]]]:
         for run_success, rows in tqdm.tqdm(mode_dict.items(), desc=f"Processing {run_mode}", leave=False):
             for row in tqdm.tqdm(rows, desc=f"Processing {run_mode} {run_success} rows", leave=False):
                 if run_mode == 'leaderboard' and run_success == True:
-                    rounded_score = round(float(row['run_score']), 4)
+                    rounded_score = round(float(row['run_score']), LEADERBOARD_SCORE_PRECISION)
                     run_duration_dict[run_mode][run_success][rounded_score].append(row)
                 else:
-                    rounded_duration = round(float(row['run_meta']['duration']), 0)
+                    rounded_duration = round(float(row['run_meta']['duration']), DURATION_PRECISION)
                     run_duration_dict[run_mode][run_success][rounded_duration].append(row)
 
     return run_duration_dict
@@ -346,10 +422,10 @@ def example_usage():
     # Apply fuzzy deduplication
     fuzzy_deduplicated_data = fuzzy_filter(
         deduplicated_data,
-        threshold=0.8,  # High threshold for more strict deduplication
-        ngram_size=5,
-        bands=16,
-        rows_per_band=128
+        threshold=FUZZY_SIMILARITY_THRESHOLD,
+        ngram_size=NGRAM_SIZE,
+        bands=LSH_BANDS,
+        rows_per_band=ROWS_PER_BAND
     )
     # convert to df
     flattened_data = flatten_data(fuzzy_deduplicated_data)
@@ -367,7 +443,13 @@ def dedup_df(df: pd.DataFrame) -> pd.DataFrame:
     # convert to dict
     data_dict = convert_df_to_dict(df)
     # deduplicate
-    deduplicated_data = fuzzy_filter(data_dict, threshold=0.8, ngram_size=5, bands=16, rows_per_band=128)
+    deduplicated_data = fuzzy_filter(
+        data_dict, 
+        threshold=FUZZY_SIMILARITY_THRESHOLD, 
+        ngram_size=NGRAM_SIZE, 
+        bands=LSH_BANDS, 
+        rows_per_band=ROWS_PER_BAND
+    )
     # convert to df
     flattened_data = flatten_data(deduplicated_data)
     df = pd.DataFrame(flattened_data)
