@@ -118,9 +118,9 @@ def remove_duplicates(data_dict: Dict[str, Dict[bool, Dict[Union[float, int], Li
                         # If duplicate found, keep the one with better metrics
                         existing_row = unique_entries[content_hash]
                         
-                        # For leaderboard mode with successful runs, prefer higher scores
+                        # For leaderboard mode with successful runs, prefer lower scores / faster times
                         if run_mode == 'leaderboard' and row.get('run_passed') == True:
-                            if row.get('run_score', 0) > existing_row.get('run_score', 0):
+                            if row.get('run_score', 0) < existing_row.get('run_score', 0):
                                 unique_entries[content_hash] = row
                         # For other cases, prefer shorter duration (faster execution)
                         else:
