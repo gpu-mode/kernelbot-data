@@ -5,6 +5,7 @@ import pandas as pd
 from datasets import Dataset
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
+from dedup import dedup_df
 
 load_dotenv()
 
@@ -199,11 +200,27 @@ def main(output_dir):
     submissions_dataset.to_parquet(submissions_output_path)
     print(f"Submissions dataset successfully saved to {submissions_output_path}")
 
+    # Deduplicate submissions  
+    print("Applying deduplication to submissions...")
+    try:
+        deduplicated_submissions_df = dedup_df(submissions_df.copy())
+        deduplicated_submissions_path = os.path.join(output_dir, "deduplicated_submissions.parquet")
+        
+        # Convert to dataset and save
+        deduplicated_submissions_dataset = Dataset.from_pandas(deduplicated_submissions_df)
+        deduplicated_submissions_dataset.to_parquet(deduplicated_submissions_path)
+        print(f"Deduplicated submissions dataset successfully saved to {deduplicated_submissions_path}")
+        print(f"Original submissions: {len(submissions_df)}, After deduplication: {len(deduplicated_submissions_df)}")
+        
+    except Exception as e:
+        print(f"Warning: Deduplication failed with error: {e}")
+        print("Proceeding without deduplication...")
+        deduplicated_submissions_df = submissions_df.copy()
+
     # Filter for and save successful submissions from the anonymized data
     if 'run_passed' in submissions_df.columns:
         print("Creating successful submissions dataset...")
         successful_submissions_df = submissions_df[submissions_df['run_passed'] == True].copy()
-
         # Convert to dataset and save
         successful_submissions_dataset = Dataset.from_pandas(successful_submissions_df)
         successful_output_path = os.path.join(
@@ -214,6 +231,15 @@ def main(output_dir):
             "Successful submissions dataset successfully saved to "
             f"{successful_output_path}"
         )
+
+        # Create deduplicated successful submissions
+        print("Creating deduplicated successful submissions dataset...")
+        deduplicated_successful_submissions_df = deduplicated_submissions_df[deduplicated_submissions_df['run_passed'] == True].copy()
+        deduplicated_successful_submissions_dataset = Dataset.from_pandas(deduplicated_successful_submissions_df)
+        deduplicated_successful_submissions_path = os.path.join(output_dir, "deduplicated_successful_submissions.parquet")
+        deduplicated_successful_submissions_dataset.to_parquet(deduplicated_successful_submissions_path)
+        print(f"Deduplicated successful submissions dataset successfully saved to {deduplicated_successful_submissions_path}")
+        print(f"Original successful submissions: {len(successful_submissions_df)}, After deduplication: {len(deduplicated_successful_submissions_df)}")
 
 
 if __name__ == "__main__":
