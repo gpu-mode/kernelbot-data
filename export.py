@@ -6,6 +6,8 @@ from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 import pyarrow as pa
 import pyarrow.parquet as pq
+import glob
+from dedup import deduplicate_df
 
 load_dotenv()
 
@@ -222,8 +224,8 @@ def consolidate_parquet_files(input_dir, pattern, output_file):
         input_dir: Directory containing the parquet part files
         pattern: Glob pattern to match the part files (e.g., "submissions_part_*.parquet")
         output_file: Path to the output consolidated parquet file
+        skip_deduplication: Whether to skip deduplication step (default: False)
     """
-    import glob
 
     # Find all matching parquet files
     part_files = sorted(glob.glob(os.path.join(input_dir, pattern)))
@@ -260,8 +262,21 @@ def consolidate_parquet_files(input_dir, pattern, output_file):
 
     print(f"  Done! Consolidated {len(part_files)} files ({total_rows} total rows)")
 
+def deduplicate_parquet_file(input_file, output_file):
+    """
+    Deduplicates a parquet file using the dedup.py script.
+    """
+    
+    # load the parquet file into a pandas dataframe
+    df = pd.read_parquet(input_file)
+    
+    # deduplicate the dataframe
+    deduplicated_df = deduplicate_df(df)
+    
+    # save the deduplicated dataframe to a new parquet file
+    deduplicated_df.to_parquet(output_file)
 
-def main(output_dir):
+def main(output_dir, skip_deduplication):
     """
     Orchestrates the data export process.
 
@@ -304,6 +319,40 @@ def main(output_dir):
         os.path.join(output_dir, "successful_submissions.parquet")
     )
 
+    if not skip_deduplication:
+        deduplicated_submissions_output_path = os.path.join(output_dir, "deduplicated_submissions")
+        deduplicated_successful_submissions_output_path = os.path.join(output_dir, "deduplicated_successful_submissions")
+        os.makedirs(deduplicated_submissions_output_path, exist_ok=True)
+        # we do this as everything combined can be too much for pandas to handle
+        # if things get too big I'd multiprocess this
+        for file in glob.glob(os.path.join(output_dir, "submissions_part_*.parquet")):
+            deduplicate_parquet_file(file, os.path.join(deduplicated_submissions_output_path, os.path.basename(file)))
+        for file in glob.glob(os.path.join(output_dir, "successful_submissions_part_*.parquet")):
+            deduplicate_parquet_file(file, os.path.join(deduplicated_successful_submissions_output_path, os.path.basename(file)))
+        consolidate_parquet_files(
+            deduplicated_submissions_output_path,
+            "submissions_part_*.parquet",
+            os.path.join(output_dir, "deduplicated_submissions.parquet")
+        )
+        consolidate_parquet_files(
+            deduplicated_successful_submissions_output_path,
+            "successful_submissions_part_*.parquet",
+            os.path.join(output_dir, "deduplicated_successful_submissions.parquet")
+        )
+        original_submission_rows = pd.read_parquet(os.path.join(output_dir, "submissions.parquet")).shape[0]
+        deduplicated_submission_rows = pd.read_parquet(os.path.join(output_dir, "deduplicated_submissions.parquet")).shape[0]
+        original_successful_submission_rows = pd.read_parquet(os.path.join(output_dir, "successful_submissions.parquet")).shape[0]
+        deduplicated_successful_submission_rows = pd.read_parquet(os.path.join(output_dir, "deduplicated_successful_submissions.parquet")).shape[0]
+
+        print("Deduplication results Summary:")
+        print(f"Original submissions rows: {original_submission_rows}")
+        print(f"Deduplicated submissions rows: {deduplicated_submission_rows}")
+        print(f"Removed {original_submission_rows - deduplicated_submission_rows} duplicates ({100 * (original_submission_rows - deduplicated_submission_rows) / original_submission_rows:.1f}%)")
+        print(f"Original successful submissions rows: {original_successful_submission_rows}")
+        print(f"Deduplicated successful submissions rows: {deduplicated_successful_submission_rows}")
+        print(f"Removed {original_successful_submission_rows - deduplicated_successful_submission_rows} duplicates ({100 * (original_successful_submission_rows - deduplicated_successful_submission_rows) / original_successful_submission_rows:.1f}%)")
+    else:
+        print("Skipping deduplication step")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Export leaderboard data to a Hugging Face dataset.")
@@ -313,5 +362,10 @@ if __name__ == "__main__":
         default="dataset",
         help="Directory to save the Hugging Face dataset."
     )
+    parser.add_argument(
+        "--skip_deduplication",
+        action="store_true",
+        help="Skip deduplication step"
+    )
     args = parser.parse_args()
-    main(args.output_dir) 
+    main(args.output_dir, args.skip_deduplication) 
